@@ -1,37 +1,19 @@
-import axios from "axios";
-import { ErrorWithStatus } from "../middlewares/errorHandler.js";
-import URL from "../model/url.schema.js";
+import Url from "../model/url.schema.js";
+import { generateQRCode } from "../utils/qrGenerator.js";
 
-// Serve the QR code image
-const serveQrCodeImage = async (req, res, next) => {
-  try {
+export const generateQrCodeForUrl = async (req, res) => {
     const { shortUrl } = req.params;
 
-    // Find the URL by shortUrl
-    const urlRecord = await URL.findOne({ shortUrl });
-    if (!urlRecord) {
-      return next(new ErrorWithStatus("URL not found", 404));
+    try {
+        const url = await Url.findOne({ shortUrl });
+        if (!url) return res.status(404).json({ message: 'URL not found' });
+
+        const qrCodeUrl = await generateQRCode("${process.env.BASE_URL}/${shortUrl}");
+        url.qrCodeUrl = qrCodeUrl;
+        await url.save();
+
+        res.status(200).json({ qrCodeUrl });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    // Check if the QR code URL exists
-    if (!urlRecord.qrCodeUrl) {
-      return next(new ErrorWithStatus("QR code not found", 404));
-    }
-
-    // Fetch the QR code image from the third-party API
-    const response = await axios.get(urlRecord.qrCodeUrl, {
-      responseType: 'arraybuffer' // Ensures that the response is treated as binary data
-    });
-
-    // Set the content type to image/png (or whatever format the API returns)
-    res.setHeader('Content-Type', 'image/png');
-    
-    // Send the image data to the client
-    res.send(response.data);
-  } catch (error) {
-    console.error(error);
-    return next(new ErrorWithStatus("Internal Server Error", 500));
-  }
 };
-
-export { serveQrCodeImage };
